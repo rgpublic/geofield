@@ -7,8 +7,9 @@
 
 namespace Drupal\geofield\Plugin\views\filter;
 
-use Drupal\Component\Annotation\PluginID;
-use Drupal\views\Plugin\views\filter\Numeric;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\geofield\Plugin\GeofieldProximityManagerTrait;
+use Drupal\views\Plugin\views\field\NumericField;
 
 /**
  * Field handler to filter Geofields by proximity.
@@ -17,7 +18,8 @@ use Drupal\views\Plugin\views\filter\Numeric;
  *
  * @PluginID("geofield_proximity")
  */
-class GeofieldProximity extends Numeric {
+class GeofieldProximity extends NumericField {
+  use GeofieldProximityManagerTrait;
 
   protected function defineOptions() {
     $options = parent::defineOptions();
@@ -32,11 +34,13 @@ class GeofieldProximity extends Numeric {
         'origin' => array(),
       ),
     );
-    $proximityHandlers = geofield_proximity_views_handlers();
-    foreach ($proximityHandlers as $key => $handler) {
-      $proximityPlugin = geofield_proximity_load_plugin($key);
-      $proximityPlugin->option_definition($options, $this);
+
+    foreach ($this->getProximityManager()->getDefinitions() as $plugin_id => $definition) {
+      /** @var \Drupal\geofield\Plugin\GeofieldProximityInterface $instance */
+      $instance = $this->getProximityManager()->createInstance($plugin_id);
+      $instance->defineOptions($options, $this);
     }
+
     return $options;
   }
 
@@ -96,13 +100,13 @@ class GeofieldProximity extends Numeric {
   }
 
   public function query() {
-    $proximityPlugin = geofield_proximity_load_plugin($this->options['source']);
+    $this->ensureMyTable();
+    $proximityPlugin = $this->getProximityManager()->createInstance($this->options['source']);
     $options = $proximityPlugin->getSourceValue($this);
 
     if ($options) {
-      $lat_alias = $this->definition['field_name'] . '_lat';
-      $lon_alias = $this->definition['field_name'] . '_lon';
-      $this->ensureMyTable();
+      $lat_alias = $this->realField . '_lat';
+      $lon_alias = $this->realField . '_lon';
 
       $info = $this->operators();
       if (!empty($info[$this->operator]['method'])) {
@@ -119,14 +123,14 @@ class GeofieldProximity extends Numeric {
   }
 
   protected function opBetween($options) {
-    $this->query->add_where_expression($this->options['group'], geofield_haversine($options) . ' ' . strtoupper($this->operator) . ' ' . $this->value['distance'] . ' AND ' . $this->value['distance2']);
+    $this->query->addWhereExpression($this->options['group'], geofield_haversine($options) . ' ' . strtoupper($this->operator) . ' ' . $this->value['distance'] . ' AND ' . $this->value['distance2']);
   }
 
   protected function opSimple($options) {
-    $this->query->add_where_expression($this->options['group'], geofield_haversine($options) . ' ' . $this->operator . ' ' . $this->value['distance']);
+    $this->query->addWhereExpression($this->options['group'], geofield_haversine($options) . ' ' . $this->operator . ' ' . $this->value['distance']);
   }
 
-  public function buildOptionsForm(&$form, &$form_state) {
+  public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     parent::buildOptionsForm($form, $form_state);
     $form['source'] = array(
       '#type' => 'select',
@@ -144,17 +148,16 @@ class GeofieldProximity extends Numeric {
     $form['source_change'] = array(
       '#type' => 'submit',
       '#value' => 'Change Source Widget',
-      '#submit' => array('geofield_views_ui_change_proximity_widget'),
+      '#submit' => array('::geofield_views_ui_change_proximity_widget'),
     );
 
-    $proximityHandlers = geofield_proximity_views_handlers();
-    foreach ($proximityHandlers as $key => $handler) {
+    foreach ($this->proximityManager->getDefinitions() as $plugin_id => $plugin_id) {
       // Manually skip 'Exposed Filter', since it wouldn't make any sense in this context.
-      if ($key != 'exposed_geofield_filter') {
-        $form['source']['#options'][$key] = $handler['name'];
-
-        $proximityPlugin = geofield_proximity_load_plugin($key);
-        $proximityPlugin->options_form($form, $form_state, $this);
+      if ($plugin_id != 'exposed_geofield_filter') {
+        $form['source']['#options'][$plugin_id] = $plugin_id['admin_label'];
+        /** @var \Drupal\geofield\Plugin\GeofieldProximityInterface $instance */
+        $instance = $this->proximityManager->createInstance($plugin_id);
+        $instance->buildOptionsForm($form, $form_state, $this);
       }
     }
 
@@ -167,10 +170,33 @@ class GeofieldProximity extends Numeric {
     }
   }
 
-  public function validateOptionsForm(&$form, &$form_state) {
+  function geofield_views_ui_change_proximity_widget($form, &$form_state) {
+    $item = &$form_state['handler']->options;
+    $changed = $item['source'] != $form_state['values']['options']['source'];
+    $item['source'] = $form_state['values']['options']['source'];
+
+    if ($changed) {
+      if ($item['source'] == 'manual') {
+        $item['value']['origin'] = array('lat' => '', 'lon' => '');
+      }
+      else {
+        $item['value']['origin'] = '';
+      }
+    }
+
+    $form_state['view']->set_item($form_state['display_id'], $form_state['type'], $form_state['id'], $item);
+
+    views_ui_cache_set($form_state['view']);
+    $form_state['rerender'] = TRUE;
+    $form_state['rebuild'] = TRUE;
+    $form_state['force_expose_options'] = TRUE;
+  }
+
+  public function validateOptionsForm(&$form, FormStateInterface $form_state) {
     parent::validateOptionsForm($form, $form_state);
-    $proximityPlugin = geofield_proximity_load_plugin($form_state['values']['options']['source']);
-    $proximityPlugin->options_validate($form, $form_state, $this);
+    /** @var \Drupal\geofield\Plugin\GeofieldProximityInterface $instance */
+    $instance = $this->proximityManager->createInstance($form_state->getValue('options')['source']);
+    $instance->validateOptionsForm($form, $form_state, $this);
   }
 
   protected function valueForm(&$form, &$form_state) {
@@ -240,26 +266,4 @@ class GeofieldProximity extends Numeric {
     $this->value['origin'] = $input[$input_id]['origin'];
     return TRUE;
   }
-} // class GeofieldProximity
-
-function geofield_views_ui_change_proximity_widget($form, &$form_state) {
-  $item = &$form_state['handler']->options;
-  $changed = $item['source'] != $form_state['values']['options']['source'];
-  $item['source'] = $form_state['values']['options']['source'];
-
-  if ($changed) {
-    if ($item['source'] == 'manual') {
-      $item['value']['origin'] = array('lat' => '', 'lon' => '');
-    }
-    else {
-      $item['value']['origin'] = '';
-    }
-  }
-
-  $form_state['view']->set_item($form_state['display_id'], $form_state['type'], $form_state['id'], $item);
-
-  views_ui_cache_set($form_state['view']);
-  $form_state['rerender'] = TRUE;
-  $form_state['rebuild'] = TRUE;
-  $form_state['force_expose_options'] = TRUE;
 }

@@ -7,17 +7,20 @@
 
 namespace Drupal\geofield\Plugin\views\field;
 
-use Drupal\Component\Annotation\PluginID;
-use Drupal\views\Plugin\views\field\Numeric;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\geofield\Plugin\GeofieldProximityManagerTrait;
+use Drupal\views\Plugin\views\field\NumericField;
+use Drupal\views\ResultRow;
 
 /**
  * Field handler to render a Geofield proximity in Views.
  *
  * @ingroup views_field_handlers
  *
- * @PluginID("geofield_proximity")
+ * @ViewsField("geofield_proximity")
  */
-class GeofieldProximity extends Numeric {
+class GeofieldProximity extends NumericField {
+  use GeofieldProximityManagerTrait;
 
   /**
    * {@inheritdoc}.
@@ -26,11 +29,12 @@ class GeofieldProximity extends Numeric {
     $options = parent::defineOptions();
 
     // Data sources and info needed.
-    $options['source'] = array('default' => 'manual');
+    $options['source'] = array('default' => 'geofield_manual_filter');
 
-    foreach (geofield_proximity_views_handlers() as $key => $handler) {
-      $proximityPlugin = geofield_proximity_load_plugin($key);
-      $proximityPlugin->option_definition($options, $this);
+    foreach ($this->getProximityManager()->getDefinitions() as $plugin_id => $definition) {
+      /** @var \Drupal\geofield\Plugin\GeofieldProximityInterface $instance */
+      $instance = $this->getProximityManager()->createInstance($plugin_id);
+      $instance->defineOptions($options, $this);
     }
 
     $options['radius_of_earth'] = array('default' => GEOFIELD_KILOMETERS);
@@ -40,7 +44,7 @@ class GeofieldProximity extends Numeric {
   /**
    * {@inheritdoc}.
    */
-  public function buildOptionsForm(&$form, &$form_state) {
+  public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     parent::buildOptionsForm($form, $form_state);
 
     $form['source'] = array(
@@ -51,11 +55,11 @@ class GeofieldProximity extends Numeric {
       '#default_value' => $this->options['source'],
     );
 
-    $proximityHandlers = geofield_proximity_views_handlers();
-    foreach ($proximityHandlers as $key => $handler) {
-      $form['source']['#options'][$key] = $handler['name'];
-      $proximityPlugin = geofield_proximity_load_plugin($key);
-      $proximityPlugin->options_form($form, $form_state, $this);
+    foreach ($this->proximityManager->getDefinitions() as $plugin_id => $definition) {
+      $form['source']['#options'][$plugin_id] = $definition['admin_label'];
+      /** @var \Drupal\geofield\Plugin\GeofieldProximityInterface $instance */
+      $instance = $this->proximityManager->createInstance($plugin_id);
+      $instance->buildOptionsForm($form, $form_state, $this);
     }
 
     $form['radius_of_earth'] = array(
@@ -70,15 +74,16 @@ class GeofieldProximity extends Numeric {
   /**
    * {@inheritdoc}.
    */
-  public function validateOptionsForm(&$form, &$form_state) {
-    $proximityPlugin = geofield_proximity_load_plugin($form_state['values']['options']['source']);
-    $proximityPlugin->options_validate($form, $form_state, $this);
+  public function validateOptionsForm(&$form, FormStateInterface $form_state) {
+    /** @var \Drupal\geofield\Plugin\GeofieldProximityInterface $instance */
+    $instance = $this->proximityManager->createInstance($form_state->getValue('options')['source']);
+    $instance->validateOptionsForm($form, $form_state, $this);
   }
 
   /**
    * {@inheritdoc}.
    */
-  public function getValue($values, $field = NULL) {
+  public function getValue(ResultRow $values, $field = NULL) {
     if (isset($values->{$this->field_alias})) {
       return $values->{$this->field_alias};
     }
@@ -90,11 +95,12 @@ class GeofieldProximity extends Numeric {
   public function query() {
     $this->ensureMyTable();
 
-    $lat_alias = $this->tableAlias . '.' . $this->definition['field_name'] . '_lat';
-    $lon_alias = $this->tableAlias . '.' . $this->definition['field_name'] . '_lon';
+    $lat_alias = $this->realField . '_lat';
+    $lon_alias = $this->realField . '_lon';
 
-    $proximityPlugin = geofield_proximity_load_plugin($this->options['source']);
-    $options = $proximityPlugin->getSourceValue($this);
+    /** @var \Drupal\geofield\Plugin\GeofieldProximityInterface $instance */
+    $instance = $this->proximityManager->createInstance($this->options['source']);
+    $options = $instance->getSourceValue($this);
 
     if ($options != FALSE) {
       $haversine_options = array(
@@ -105,8 +111,10 @@ class GeofieldProximity extends Numeric {
         'earth_radius' => $this->options['radius_of_earth'],
       );
 
-      $this->field_alias = $this->query->add_field(NULL, geofield_haversine($haversine_options), $this->tableAlias . '_' . $this->field);
+      $this->field_alias = $this->query->addField(NULL, geofield_haversine($haversine_options), $this->tableAlias . '_' . $this->field);
     }
+
+    $this->addAdditionalFields();
   }
 
 }
