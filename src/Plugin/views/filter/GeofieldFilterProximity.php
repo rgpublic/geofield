@@ -198,7 +198,7 @@ class GeofieldFilterProximity extends NumericFilter {
     $instance->validateOptionsForm($form, $form_state, $this);
   }
 
-  protected function valueForm(&$form, &$form_state) {
+  protected function valueForm(&$form, FormStateInterface $form_state) {
     $form['value'] = array(
       '#type' => 'geofield_proximity',
       '#title' => t('Proximity Search'),
@@ -223,7 +223,7 @@ class GeofieldFilterProximity extends NumericFilter {
     }
   }
 
-  protected function valueValidate($form, &$form_state) {
+  protected function valueValidate($form, FormStateInterface $form_state) {
     parent::valueValidate($form, $form_state);
     $proximityPlugin = geofield_proximity_load_plugin($form_state['values']['options']['source']);
     $proximityPlugin->value_validate($form, $form_state, $this);
