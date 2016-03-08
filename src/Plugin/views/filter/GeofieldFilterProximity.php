@@ -9,16 +9,15 @@ namespace Drupal\geofield\Plugin\views\filter;
 
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\geofield\Plugin\GeofieldProximityManagerTrait;
-use Drupal\views\Plugin\views\field\NumericField;
-
+use Drupal\views\Plugin\views\filter\NumericFilter;
 /**
  * Field handler to filter Geofields by proximity.
  *
- * @ingroup views_field_handlers
+ * @ingroup views_filter_handlers
  *
- * @PluginID("geofield_proximity")
+ * @ViewsFilter("geofield_filter_proximity")
  */
-class GeofieldProximity extends NumericField {
+class GeofieldFilterProximity extends NumericFilter {
   use GeofieldProximityManagerTrait;
 
   protected function defineOptions() {
