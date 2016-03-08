@@ -150,10 +150,10 @@ class GeofieldFilterProximity extends NumericFilter {
       '#submit' => array('::geofield_views_ui_change_proximity_widget'),
     );
 
-    foreach ($this->proximityManager->getDefinitions() as $plugin_id => $plugin_id) {
+    foreach ($this->proximityManager->getDefinitions() as $plugin_id => $definition) {
       // Manually skip 'Exposed Filter', since it wouldn't make any sense in this context.
       if ($plugin_id != 'exposed_geofield_filter') {
-        $form['source']['#options'][$plugin_id] = $plugin_id['admin_label'];
+        $form['source']['#options'][$plugin_id] = $definition['admin_label'];
         /** @var \Drupal\geofield\Plugin\GeofieldProximityInterface $instance */
         $instance = $this->proximityManager->createInstance($plugin_id);
         $instance->buildOptionsForm($form, $form_state, $this);
