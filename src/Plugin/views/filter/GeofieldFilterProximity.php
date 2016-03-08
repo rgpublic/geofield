@@ -214,8 +214,8 @@ class GeofieldFilterProximity extends NumericFilter {
       ),
     );
 
-    $proximityPlugin = geofield_proximity_load_plugin($this->options['source']);
-    $proximityPlugin->value_form($form, $form_state, $this);
+    //$proximityPlugin = geofield_proximity_load_plugin($this->options['source']);
+    //$proximityPlugin->value_form($form, $form_state, $this);
 
     if (in_array($this->operator, array('between', 'not between'))) {
       $form['value']['#geofield_range'] = TRUE;
@@ -225,8 +225,8 @@ class GeofieldFilterProximity extends NumericFilter {
 
   protected function valueValidate($form, FormStateInterface $form_state) {
     parent::valueValidate($form, $form_state);
-    $proximityPlugin = geofield_proximity_load_plugin($form_state['values']['options']['source']);
-    $proximityPlugin->value_validate($form, $form_state, $this);
+    //$proximityPlugin = geofield_proximity_load_plugin($form_state['values']['options']['source']);
+    //$proximityPlugin->value_validate($form, $form_state, $this);
   }
 
   public function adminSummary() {
