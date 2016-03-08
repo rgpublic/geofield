@@ -24,7 +24,7 @@ class GeofieldFilterProximity extends NumericFilter {
     $options = parent::defineOptions();
 
     // Data sources and info needed.
-    $options['source'] = array('default' => 'manual');
+    $options['source'] = array('default' => 'geofield_manual_filter');
     $options['value'] = array(
       'default' => array(
         'distance' => 100,
