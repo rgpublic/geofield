@@ -10,6 +10,8 @@ namespace Drupal\geofield\Plugin\views\filter;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\geofield\Plugin\GeofieldProximityManagerTrait;
 use Drupal\views\Plugin\views\filter\NumericFilter;
+use \Drupal\Component\Utility\Html;
+
 /**
  * Field handler to filter Geofields by proximity.
  *
@@ -234,13 +236,13 @@ class GeofieldFilterProximity extends NumericFilter {
       return t('exposed');
     }
 
-    $options = $this->operator_options('short');
-    $output = check_plain($options[$this->operator]);
-    if (in_array($this->operator, $this->operator_values(2))) {
+    $options = $this->operatorOptions('short');
+    $output = Html::escape($options[$this->operator]);
+    if (in_array($this->operator, $this->operatorValues(2))) {
       $output .= ' ' . t('@min and @max', array('@min' => $this->value['distance'], '@max' => $this->value['distance2']));
     }
-    elseif (in_array($this->operator, $this->operator_values(1))) {
-      $output .= ' ' . check_plain($this->value['distance']);
+    elseif (in_array($this->operator, $this->operatorValues(1))) {
+      $output .= ' ' . Html::escape($this->value['distance']);
     }
     return $output;
   }
